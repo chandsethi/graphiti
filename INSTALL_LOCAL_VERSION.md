@@ -12,6 +12,14 @@ A knowledge graph that runs 100% locally on your Mac:
 
 ## One-Line Install
 
+**For testing (before PR merge):**
+
+```bash
+pip install "git+https://github.com/chandsethi/graphiti.git@cursor/local-memory-agent-90d5#subdirectory=mcp_server_local"
+```
+
+**After PR merge:**
+
 ```bash
 pip install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
 ```
@@ -19,7 +27,7 @@ pip install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_ser
 Or with `pipx` (recommended for isolated installs):
 
 ```bash
-pipx install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
+pipx install "git+https://github.com/chandsethi/graphiti.git@cursor/local-memory-agent-90d5#subdirectory=mcp_server_local"
 ```
 
 This installs the `graphiti-local-mcp` command.
@@ -31,8 +39,6 @@ Add this to your `~/.codex/config.toml`:
 ```toml
 [mcp_servers.graphiti-local]
 command = "graphiti-local-mcp"
-args = []
-env = {}
 ```
 
 If the command isn't found after install, use the full path:
@@ -47,8 +53,6 @@ Then use the full path in your config:
 ```toml
 [mcp_servers.graphiti-local]
 command = "/Users/yourname/.local/bin/graphiti-local-mcp"
-args = []
-env = {}
 ```
 
 ## Restart Codex

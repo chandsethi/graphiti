@@ -17,6 +17,14 @@ A local-only version of Graphiti designed for work environments without internet
 
 ### One-Line Install
 
+**For testing (before PR merge):**
+
+```bash
+pip install "git+https://github.com/chandsethi/graphiti.git@cursor/local-memory-agent-90d5#subdirectory=mcp_server_local"
+```
+
+**After PR merge (use main branch):**
+
 ```bash
 pip install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
 ```
@@ -24,7 +32,7 @@ pip install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_ser
 Or with `pipx` (recommended for isolated installs):
 
 ```bash
-pipx install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
+pipx install "git+https://github.com/chandsethi/graphiti.git@cursor/local-memory-agent-90d5#subdirectory=mcp_server_local"
 ```
 
 This installs the `graphiti-local-mcp` command.
@@ -51,8 +59,6 @@ Add this to your `~/.codex/config.toml`:
 ```toml
 [mcp_servers.graphiti-local]
 command = "graphiti-local-mcp"
-args = []
-env = {}
 ```
 
 If the command isn't found, use the full path from `which graphiti-local-mcp`:
@@ -60,8 +66,6 @@ If the command isn't found, use the full path from `which graphiti-local-mcp`:
 ```toml
 [mcp_servers.graphiti-local]
 command = "/Users/yourname/.local/bin/graphiti-local-mcp"
-args = []
-env = {}
 ```
 
 After adding the configuration, restart Codex.

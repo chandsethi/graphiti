@@ -3,6 +3,7 @@
 import json
 import logging
 import math
+import os
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -14,18 +15,23 @@ from .models import Entity, MemoryKind, PlanStatus, Relationship
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path.home() / '.graphiti-local'
-DATA_DIR.mkdir(exist_ok=True)
+def get_data_dir() -> Path:
+    """Get the data directory, creating it if needed."""
+    data_dir = Path(os.environ.get('GRAPHITI_LOCAL_DIR', str(Path.home() / '.graphiti-local')))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
 
-DB_PATH = str(DATA_DIR / 'kuzu.db')
+def get_default_db_path() -> str:
+    """Get the default database path."""
+    return str(get_data_dir() / 'kuzu.db')
 
 
 class LocalStorage:
     """Embedded Kuzu storage for local knowledge graph."""
 
-    def __init__(self, db_path: str = DB_PATH):
-        self.db_path = db_path
-        self.db = kuzu.Database(db_path)
+    def __init__(self, db_path: str | None = None):
+        self.db_path = db_path or get_default_db_path()
+        self.db = kuzu.Database(self.db_path)
         self.conn = kuzu.Connection(self.db)
         self._init_schema()
 

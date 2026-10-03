@@ -39,7 +39,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 server = Server('graphiti-local')
-storage = LocalStorage()
+storage = None  # Lazy init
+
+
+def get_storage() -> LocalStorage:
+    """Get or create the storage instance."""
+    global storage
+    if storage is None:
+        storage = LocalStorage()
+    return storage
 
 
 @server.list_tools()
@@ -309,6 +317,8 @@ async def _add_memory(args: dict) -> list[TextContent]:
     """Add a memory."""
     req = AddMemoryRequest(**args)
 
+    storage = get_storage()
+    
     entities = []
     for e in req.entities:
         entity = Entity(
@@ -348,6 +358,7 @@ async def _add_memory(args: dict) -> list[TextContent]:
 
 async def _search_memory(args: dict) -> list[TextContent]:
     """Search memories."""
+    storage = get_storage()
     req = SearchMemoryRequest(**args)
 
     results = storage.search_relationships(
@@ -381,6 +392,7 @@ async def _search_memory(args: dict) -> list[TextContent]:
 
 async def _get_entity_neighborhood(args: dict) -> list[TextContent]:
     """Get entity neighborhood."""
+    storage = get_storage()
     entity_name = args['entity_name']
     group_id = args.get('group_id', 'default')
 
@@ -405,6 +417,7 @@ async def _get_entity_neighborhood(args: dict) -> list[TextContent]:
 
 async def _update_plan_status(args: dict) -> list[TextContent]:
     """Update plan status."""
+    storage = get_storage()
     req = UpdatePlanStatusRequest(**args)
 
     result = storage.get_relationship(req.relationship_uuid)
@@ -426,6 +439,7 @@ async def _update_plan_status(args: dict) -> list[TextContent]:
 
 async def _supersede_plan(args: dict) -> list[TextContent]:
     """Supersede a plan."""
+    storage = get_storage()
     req = SupersedePlanRequest(**args)
 
     old_result = storage.get_relationship(req.old_relationship_uuid)
@@ -467,6 +481,7 @@ async def _supersede_plan(args: dict) -> list[TextContent]:
 
 async def _promote_idea(args: dict) -> list[TextContent]:
     """Promote an idea."""
+    storage = get_storage()
     req = PromoteIdeaRequest(**args)
 
     result = storage.get_relationship(req.relationship_uuid)
@@ -495,6 +510,7 @@ async def _promote_idea(args: dict) -> list[TextContent]:
 
 async def _mark_fact_correction(args: dict) -> list[TextContent]:
     """Mark a fact as corrected."""
+    storage = get_storage()
     req = MarkFactCorrectionRequest(**args)
 
     old_fact_result = storage.get_relationship(req.fact_uuid)
@@ -524,6 +540,7 @@ async def _mark_fact_correction(args: dict) -> list[TextContent]:
 
 async def _list_recent(args: dict) -> list[TextContent]:
     """List recent memories."""
+    storage = get_storage()
     req = ListRecentRequest(**args)
 
     results = storage.list_recent(kind=req.kind, limit=req.limit, group_id=req.group_id)
@@ -574,6 +591,7 @@ def main():
             print('This will DELETE ALL DATA for the group. Use --yes to confirm.')
             sys.exit(1)
 
+        storage = get_storage()
         storage.clear_all(args.group_id)
         print(f'All data cleared for group: {args.group_id}')
         sys.exit(0)
