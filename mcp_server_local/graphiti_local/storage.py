@@ -2,6 +2,8 @@
 
 import json
 import logging
+import math
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -234,8 +236,8 @@ class LocalStorage:
         limit: int = 10,
         group_id: str = 'default',
     ) -> list[tuple[Relationship, Entity, Entity]]:
-        """Search relationships using BM25-like keyword matching and filters."""
-        query_parts = query.lower().split()
+        """Search relationships using BM25 keyword ranking and filters."""
+        query_parts = query.lower().split() if query else []
 
         cypher_query = """
             MATCH (r:Relationship)-[:HAS_SOURCE]->(s:Entity)
@@ -244,8 +246,16 @@ class LocalStorage:
         """
         params: dict[str, Any] = {'group_id': group_id}
 
+        # For plans, exclude superseded/done/dropped by default
         if not include_superseded:
-            cypher_query += ' AND r.superseded_by IS NULL AND r.invalid_at IS NULL'
+            cypher_query += ' AND r.superseded_by IS NULL'
+            if kind == MemoryKind.PLAN:
+                cypher_query += (
+                    ' AND (r.plan_status IS NULL OR '
+                    '(r.plan_status <> $done_status AND r.plan_status <> $dropped_status))'
+                )
+                params['done_status'] = PlanStatus.DONE.value
+                params['dropped_status'] = PlanStatus.DROPPED.value
 
         if kind:
             cypher_query += ' AND r.kind = $kind'
@@ -275,9 +285,15 @@ class LocalStorage:
         if len(rows) == 0:
             return []
 
-        scored_results = []
+        # Compute BM25 scores
+        all_docs = []
         for _, row in rows.iterrows():
-            score = self._compute_bm25_score(row, query_parts, tags)
+            doc_text = self._build_document_text(row)
+            all_docs.append(doc_text)
+
+        scored_results = []
+        for idx, row in rows.iterrows():
+            score = self._compute_bm25_score(all_docs[idx], query_parts, all_docs, tags, row)
             rel = self._row_to_relationship(row, 'r')
             source = self._row_to_entity(row, 's')
             target = self._row_to_entity(row, 't')
@@ -286,17 +302,77 @@ class LocalStorage:
         scored_results.sort(key=lambda x: x[0], reverse=True)
         return [(r, s, t) for (score, r, s, t) in scored_results[:limit]]
 
-    def _compute_bm25_score(
-        self, row: Any, query_terms: list[str], tags: list[str] | None
-    ) -> float:
-        """Simple BM25-like scoring."""
-        text = (row['r.fact'] + ' ' + row['s.name'] + ' ' + row['t.name']).lower()
-        score = sum(1.0 for term in query_terms if term in text)
+    def _build_document_text(self, row: Any) -> str:
+        """Build searchable text from a row."""
+        parts = [
+            row['r.fact'],
+            row['s.name'],
+            row['s.summary'],
+            row['t.name'],
+            row['t.summary'],
+        ]
+        return ' '.join(str(p) for p in parts if p).lower()
 
+    def _compute_bm25_score(
+        self,
+        doc_text: str,
+        query_terms: list[str],
+        all_docs: list[str],
+        tags: list[str] | None,
+        row: Any,
+    ) -> float:
+        """Compute BM25 score with term frequency, IDF, and length normalization.
+        
+        BM25 formula: sum over query terms of:
+            IDF(term) * (TF(term) * (k1 + 1)) / (TF(term) + k1 * (1 - b + b * (doclen / avgdoclen)))
+        
+        Parameters:
+            k1 = 1.5 (term frequency saturation)
+            b = 0.75 (length normalization)
+        """
+        if not query_terms:
+            # No query, sort by recency or relevance of tags
+            score = 0.0
+            if tags:
+                row_tags = json.loads(row['r.tags']) if row['r.tags'] else []
+                score = sum(5.0 for tag in tags if tag in row_tags)
+            return score
+
+        # BM25 parameters
+        k1 = 1.5
+        b = 0.75
+
+        # Document length normalization
+        doc_words = doc_text.split()
+        doc_len = len(doc_words)
+        avg_doc_len = sum(len(d.split()) for d in all_docs) / max(len(all_docs), 1)
+
+        # Term frequencies in this document
+        doc_term_freq = Counter(doc_words)
+
+        # Compute BM25 score
+        score = 0.0
+        for term in query_terms:
+            if term not in doc_term_freq:
+                continue
+
+            # Term frequency in this document
+            tf = doc_term_freq[term]
+
+            # Inverse document frequency
+            docs_with_term = sum(1 for d in all_docs if term in d.split())
+            idf = math.log((len(all_docs) - docs_with_term + 0.5) / (docs_with_term + 0.5) + 1.0)
+
+            # BM25 component for this term
+            numerator = tf * (k1 + 1)
+            denominator = tf + k1 * (1 - b + b * (doc_len / avg_doc_len))
+            score += idf * (numerator / denominator)
+
+        # Boost for exact tag matches
         if tags:
             row_tags = json.loads(row['r.tags']) if row['r.tags'] else []
-            tag_matches = sum(1.0 for tag in tags if tag in row_tags)
-            score += tag_matches * 2.0
+            tag_matches = sum(1 for tag in tags if tag in row_tags)
+            score += tag_matches * 5.0
 
         return score
 

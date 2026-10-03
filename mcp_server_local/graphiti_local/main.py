@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Graphiti Local MCP Server - stdio transport."""
 
+import argparse
 import logging
 import sys
 from datetime import datetime, timezone
@@ -274,19 +275,6 @@ async def list_tools() -> list[Tool]:
                 },
             },
         ),
-        Tool(
-            name='clear_all',
-            description=(
-                'DANGEROUS: Clear all data for a group. Cannot be undone. '
-                'Use only when explicitly asked by the user.'
-            ),
-            inputSchema={
-                'type': 'object',
-                'properties': {
-                    'group_id': {'type': 'string', 'default': 'default'},
-                },
-            },
-        ),
     ]
 
 
@@ -310,8 +298,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await _mark_fact_correction(arguments)
         elif name == 'list_recent':
             return await _list_recent(arguments)
-        elif name == 'clear_all':
-            return await _clear_all(arguments)
         else:
             return [TextContent(type='text', text=f'Unknown tool: {name}')]
     except Exception as e:
@@ -560,15 +546,39 @@ async def _list_recent(args: dict) -> list[TextContent]:
     return [TextContent(type='text', text=result)]
 
 
-async def _clear_all(args: dict) -> list[TextContent]:
-    """Clear all data."""
-    group_id = args.get('group_id', 'default')
-    storage.clear_all(group_id)
-    return [TextContent(type='text', text=f'All data cleared for group: {group_id}')]
-
-
 def main():
-    """Run the MCP server."""
+    """Run the MCP server or CLI commands."""
+    parser = argparse.ArgumentParser(description='Graphiti Local Memory MCP Server')
+    parser.add_argument(
+        'command',
+        nargs='?',
+        choices=['serve', 'reset'],
+        default='serve',
+        help='Command to run (default: serve)',
+    )
+    parser.add_argument(
+        '--group-id',
+        default='default',
+        help='Group ID for operations (default: default)',
+    )
+    parser.add_argument(
+        '--yes',
+        action='store_true',
+        help='Confirm destructive operations without prompting',
+    )
+
+    args = parser.parse_args()
+
+    if args.command == 'reset':
+        if not args.yes:
+            print('This will DELETE ALL DATA for the group. Use --yes to confirm.')
+            sys.exit(1)
+
+        storage.clear_all(args.group_id)
+        print(f'All data cleared for group: {args.group_id}')
+        sys.exit(0)
+
+    # Default: run MCP server
     import asyncio
 
     async def run():

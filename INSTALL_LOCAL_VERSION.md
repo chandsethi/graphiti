@@ -1,6 +1,6 @@
 # Install Graphiti Local Memory
 
-This is the quick-start guide for the local-only version of Graphiti designed for locked-down work environments.
+Quick-start guide for the local-only version of Graphiti designed for locked-down work environments.
 
 ## What This Is
 
@@ -10,82 +10,48 @@ A knowledge graph that runs 100% locally on your Mac:
 - **No admin rights** - Pure Python install
 - **For Codex** - Designed to work with the Codex Mac app over MCP
 
-Codex provides the structured data (entities, relationships, tags), and this server just stores and retrieves it.
-
-## Requirements
-
-- macOS (tested on 13+)
-- Python 3.10 or higher
-- Internet access for initial install (packages only, no runtime API calls)
-
-## Installation
-
-### Step 1: Install Python (if needed)
-
-Check if you have Python 3.10+:
-```bash
-python3 --version
-```
-
-If not, download from [python.org](https://www.python.org/downloads/)
-
-### Step 2: Install Dependencies
+## One-Line Install
 
 ```bash
-cd mcp_server_local
-pip3 install --user pydantic python-dotenv kuzu pandas mcp
+pip install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
 ```
 
-Or using the included install script:
-```bash
-cd mcp_server_local
-./install.sh
-```
-
-### Step 3: Test the Installation
+Or with `pipx` (recommended for isolated installs):
 
 ```bash
-cd mcp_server_local
-python3 -m pytest tests/
+pipx install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
 ```
 
-All tests should pass. The key test is `test_no_api_calls.py` which verifies no network calls happen.
+This installs the `graphiti-local-mcp` command.
 
-### Step 4: Configure Codex
+## Configure Codex
 
 Add this to your `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.graphiti-local]
-command = "/usr/bin/python3"  # or wherever your python3 is
-args = [
-    "/full/path/to/graphiti/mcp_server_local/graphiti_local/main.py"
-]
-env = { }  # No API keys!
+command = "graphiti-local-mcp"
+args = []
+env = {}
 ```
 
-To find your python3 path:
+If the command isn't found after install, use the full path:
+
 ```bash
-which python3
+which graphiti-local-mcp
+# Example output: /Users/yourname/.local/bin/graphiti-local-mcp
 ```
 
-To find the full path to main.py:
-```bash
-cd mcp_server_local && pwd
-# Then add /graphiti_local/main.py to the end
-```
+Then use the full path in your config:
 
-Example result:
 ```toml
 [mcp_servers.graphiti-local]
-command = "/usr/bin/python3"
-args = [
-    "/Users/yourname/projects/graphiti/mcp_server_local/graphiti_local/main.py"
-]
-env = { }
+command = "/Users/yourname/.local/bin/graphiti-local-mcp"
+args = []
+env = {}
 ```
 
-### Step 5: Restart Codex
+## Restart Codex
 
 Restart the Codex app to pick up the new MCP server.
 
@@ -98,7 +64,7 @@ Remember this fact: I prefer Python for backend work.
 What are my tech preferences?
 ```
 
-Codex should call the `add_memory` and `search_memory` MCP tools and store/retrieve the memory.
+Codex should call the MCP tools and store/retrieve the memory.
 
 ## Data Location
 
@@ -111,42 +77,71 @@ cp -r ~/.graphiti-local/ ~/backup-graphiti-local/
 
 To reset:
 ```bash
-rm -rf ~/.graphiti-local/
+graphiti-local-mcp reset --yes
+```
+
+## For Codex: Integration Prompt
+
+See `mcp_server_local/CODEX_GUIDE.md` for a prompt snippet to help Codex use the memory system effectively. Add it to your Codex `AGENTS.md` or system prompt.
+
+## Requirements
+
+- macOS (tested on 13+) or Linux
+- Python 3.10 or higher
+- pip or pipx
+
+## Manual Install (Development)
+
+If you want to install from a local clone:
+
+```bash
+git clone https://github.com/chandsethi/graphiti.git
+cd graphiti/mcp_server_local
+pip install -e .
+```
+
+## CLI Commands
+
+```bash
+# Run the MCP server (default)
+graphiti-local-mcp
+
+# Reset all data (DANGEROUS)
+graphiti-local-mcp reset --yes
+
+# Help
+graphiti-local-mcp --help
 ```
 
 ## Troubleshooting
 
-**"command not found: python3"**
-- Install Python 3.10+ from python.org
-
-**"No module named 'kuzu'"**
-- Run `pip3 install --user kuzu pydantic python-dotenv pandas mcp`
+**"command not found: graphiti-local-mcp"**
+- Make sure pip's bin directory is on your PATH
+- Use `which graphiti-local-mcp` to find the full path
+- Or reinstall with `pipx` which handles PATH automatically
 
 **Codex doesn't see the tools**
 - Check the path in config.toml is correct
-- Make sure you restarted Codex
-- Check Codex logs for errors
+- Restart Codex after config changes
+- Check Codex logs for connection errors
 
-**Tests fail with network errors**
-- Good! That means the network-blocking test is working
-- If tests fail for other reasons, check the error message
+**Data isn't persisting**
+- Check `~/.graphiti-local/` exists and is writable
+- Try `graphiti-local-mcp reset --yes` to recreate the database
 
-## For Codex Users: Quick Prompt
+## What You Get
 
-You can share this with Codex to help it understand the system:
+8 MCP tools for Codex:
+- `add_memory` - Store facts/plans/ideas
+- `search_memory` - Query with filters
+- `get_entity_neighborhood` - Explore entity connections
+- `update_plan_status` - Mark plans done/dropped
+- `supersede_plan` - Update plans with history
+- `promote_idea` - Convert ideas to facts/plans
+- `mark_fact_correction` - Flag corrected facts
+- `list_recent` - Browse recent memories
 
-> You have access to a local knowledge graph through MCP. Store facts (stable truths), plans (versioned actions with status), and ideas (just ideas, not treated as truth). You're responsible for extracting entities, relationships, and tags from our conversation. Use the add_memory, search_memory, update_plan_status, supersede_plan, promote_idea, and other tools as needed.
-
-See `CODEX_GUIDE.md` for the full guide.
-
-## Architecture Notes
-
-This version differs from the full Graphiti:
-- **No LLM extraction** - Codex provides structured data
-- **No embeddings** - Uses BM25 keyword search + graph traversal
-- **Simpler schema** - Focus on fact/plan/idea lifecycle
-- **Embedded DB** - Kuzu file-based, no server needed
-- **No deduplication** - Exact string matching only
+No network calls, ever. Verified by tests.
 
 ## License
 

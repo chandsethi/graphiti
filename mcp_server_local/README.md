@@ -15,25 +15,33 @@ A local-only version of Graphiti designed for work environments without internet
 
 ## Installation
 
-### Requirements
-
-- macOS (tested on macOS 13+)
-- Python 3.10 or higher
-- `uv` package manager ([install instructions](https://docs.astral.sh/uv/getting-started/installation/))
-
-### Install Command
+### One-Line Install
 
 ```bash
-uv tool install git+https://github.com/YOUR_USERNAME/graphiti.git@main \
-  --from "graphiti-local[kuzu]" \
-  --with-editable /path/to/graphiti/mcp_server_local
+pip install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
 ```
 
-Or for local development:
+Or with `pipx` (recommended for isolated installs):
 
 ```bash
-cd /path/to/graphiti/mcp_server_local
-uv sync
+pipx install "git+https://github.com/chandsethi/graphiti.git#subdirectory=mcp_server_local"
+```
+
+This installs the `graphiti-local-mcp` command.
+
+### Requirements
+
+- Python 3.10 or higher
+- macOS or Linux
+
+### Development Install
+
+For local development:
+
+```bash
+git clone https://github.com/chandsethi/graphiti.git
+cd graphiti/mcp_server_local
+pip install -e .
 ```
 
 ## Codex Configuration
@@ -42,25 +50,18 @@ Add this to your `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.graphiti-local]
-command = "uv"
-args = [
-    "tool", "run",
-    "graphiti-local-mcp"
-]
-env = { }  # No API keys needed!
+command = "graphiti-local-mcp"
+args = []
+env = {}
 ```
 
-Or if installed in development mode:
+If the command isn't found, use the full path from `which graphiti-local-mcp`:
 
 ```toml
 [mcp_servers.graphiti-local]
-command = "/path/to/uv"
-args = [
-    "run",
-    "--directory", "/path/to/graphiti/mcp_server_local",
-    "python", "main.py"
-]
-env = { }
+command = "/Users/yourname/.local/bin/graphiti-local-mcp"
+args = []
+env = {}
 ```
 
 After adding the configuration, restart Codex.
@@ -97,7 +98,6 @@ Codex calls these tools on your behalf:
 - `promote_idea`: Convert an idea to a fact or plan
 - `mark_fact_correction`: Flag a fact as corrected by new information
 - `list_recent`: Get recent memories by kind
-- `clear_all`: Wipe all data (careful!)
 
 ## Architecture
 
