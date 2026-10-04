@@ -77,8 +77,8 @@ class ServerConfig(BaseModel):
     """Server configuration."""
 
     transport: str = Field(
-        default='http',
-        description='Transport type: http (default, recommended), stdio, or sse (deprecated)',
+        default='stdio',
+        description='Transport type: stdio (default for MCP), http, or sse (deprecated)',
     )
     host: str = Field(default='0.0.0.0', description='Server host')
     port: int = Field(default=8000, description='Server port')
@@ -191,17 +191,27 @@ class FalkorDBProviderConfig(BaseModel):
     database: str = 'default_db'
 
 
+class KuzuProviderConfig(BaseModel):
+    """Kuzu provider configuration."""
+
+    path: str = Field(
+        default='~/.graphiti/kuzu.db',
+        description='Path to Kuzu database file (supports ~ expansion)',
+    )
+
+
 class DatabaseProvidersConfig(BaseModel):
     """Database providers configuration."""
 
     neo4j: Neo4jProviderConfig | None = None
     falkordb: FalkorDBProviderConfig | None = None
+    kuzu: KuzuProviderConfig | None = None
 
 
 class DatabaseConfig(BaseModel):
     """Database configuration."""
 
-    provider: str = Field(default='falkordb', description='Database provider')
+    provider: str = Field(default='kuzu', description='Database provider')
     providers: DatabaseProvidersConfig = Field(default_factory=DatabaseProvidersConfig)
 
 
@@ -291,10 +301,17 @@ class GraphitiConfig(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Customize settings sources to include YAML."""
-        config_path = Path(os.environ.get('CONFIG_PATH', 'config/config.yaml'))
-        yaml_settings = YamlSettingsSource(settings_cls, config_path)
-        # Priority: CLI args (init) > env vars > yaml > defaults
-        return (init_settings, env_settings, yaml_settings, dotenv_settings)
+        config_path_str = os.environ.get('CONFIG_PATH', 'config/config.yaml')
+        config_path = Path(config_path_str)
+        
+        # Only include YAML settings if config file exists
+        if config_path.exists():
+            yaml_settings = YamlSettingsSource(settings_cls, config_path)
+            # Priority: CLI args (init) > env vars > yaml > defaults
+            return (init_settings, env_settings, yaml_settings, dotenv_settings)
+        else:
+            # No config file - use only env vars and defaults
+            return (init_settings, env_settings, dotenv_settings)
 
     def apply_cli_overrides(self, args) -> None:
         """Apply CLI argument overrides to configuration."""

@@ -225,7 +225,19 @@ class GraphitiService:
 
             # Initialize Graphiti client with appropriate driver
             try:
-                if self.config.database.provider.lower() == 'falkordb':
+                if self.config.database.provider.lower() == 'kuzu':
+                    # For Kuzu, create a KuzuDriver instance directly
+                    from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+                    kuzu_driver = KuzuDriver(db_path=db_config['db_path'])
+
+                    self.client = Graphiti(
+                        graph_driver=kuzu_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                elif self.config.database.provider.lower() == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -243,7 +255,7 @@ class GraphitiService:
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
-                    # For Neo4j (default), use the original approach
+                    # For Neo4j, use the original approach
                     self.client = Graphiti(
                         uri=db_config['uri'],
                         user=db_config['user'],

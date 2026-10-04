@@ -478,5 +478,32 @@ class DatabaseDriverFactory:
                     'database': falkor_config.database,
                 }
 
+            case 'kuzu':
+                # Use Kuzu config if provided, otherwise use defaults
+                if config.providers.kuzu:
+                    kuzu_config = config.providers.kuzu
+                else:
+                    # Create default Kuzu configuration
+                    from config.schema import KuzuProviderConfig
+
+                    kuzu_config = KuzuProviderConfig()
+
+                # Check for environment variable overrides
+                import os
+                from pathlib import Path
+
+                db_path = os.environ.get('KUZU_DB_PATH', kuzu_config.path)
+
+                # Expand ~ to user home directory
+                db_path_expanded = Path(db_path).expanduser()
+
+                # Create parent directory if it doesn't exist
+                db_path_expanded.parent.mkdir(parents=True, exist_ok=True)
+
+                return {
+                    'driver': 'kuzu',
+                    'db_path': str(db_path_expanded),
+                }
+
             case _:
                 raise ValueError(f'Unsupported Database provider: {provider}')
