@@ -59,6 +59,12 @@ class SearchFilters(BaseModel):
     edge_types: list[str] | None = Field(
         default=None, description='List of edge types to filter on'
     )
+    kinds: list[str] | None = Field(
+        default=None, description='List of edge kinds to filter on (fact, plan, idea)'
+    )
+    include_invalidated: bool = Field(
+        default=False, description='Include invalidated/expired edges in results'
+    )
     valid_at: list[list[DateFilter]] | None = Field(default=None)
     invalid_at: list[list[DateFilter]] | None = Field(default=None)
     created_at: list[list[DateFilter]] | None = Field(default=None)
@@ -128,6 +134,13 @@ def edge_search_filter_query_constructor(
         edge_types = filters.edge_types
         filter_queries.append('e.name in $edge_types')
         filter_params['edge_types'] = edge_types
+
+    if filters.kinds is not None:
+        filter_queries.append('e.kind in $kinds')
+        filter_params['kinds'] = filters.kinds
+
+    if not filters.include_invalidated:
+        filter_queries.append('e.expired_at IS NULL')
 
     if filters.edge_uuids is not None:
         filter_queries.append('e.uuid in $edge_uuids')

@@ -1,17 +1,23 @@
 [project]
-name = "mcp-server"
+name = "graphiti-mcp-server"
 version = "1.0.2"
-description = "Graphiti MCP Server"
+description = "Graphiti MCP Server with memory kind tracking"
 readme = "README.md"
 requires-python = ">=3.10,<4"
 dependencies = [
     "mcp>=1.27.2,<2",
     "openai>=2.41.0",
-    "graphiti-core[falkordb]>=0.29.2",
+    "graphiti-core[kuzu] @ git+https://github.com/chandsethi/graphiti.git@cursor/memory-kind-tracking-b83a",
     "pydantic-settings>=2.0.0",
     "pyyaml>=6.0.3",
     "typing-extensions>=4.0.0",
 ]
+
+[project.scripts]
+graphiti-mcp-server = "graphiti_mcp_server:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [project.optional-dependencies]
 azure = [

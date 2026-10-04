@@ -162,6 +162,8 @@ def _date_range_or_group(
 
 def build_fact_search_filters(
     edge_types: list[str] | None = None,
+    kinds: list[str] | None = None,
+    include_invalidated: bool = False,
     valid_at_after: str | None = None,
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
@@ -184,11 +186,19 @@ def build_fact_search_filters(
     valid_at = _date_range_or_group(valid_after, valid_before)
     invalid_at = _date_range_or_group(invalid_after, invalid_before)
 
-    if not edge_types and valid_at is None and invalid_at is None:
+    if (
+        not edge_types
+        and not kinds
+        and valid_at is None
+        and invalid_at is None
+        and not include_invalidated
+    ):
         return None
 
     return SearchFilters(
         edge_types=edge_types or None,
+        kinds=kinds or None,
+        include_invalidated=include_invalidated,
         valid_at=valid_at,
         invalid_at=invalid_at,
     )

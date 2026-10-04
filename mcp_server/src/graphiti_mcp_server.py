@@ -37,7 +37,12 @@ from models.response_types import (
     SuccessResponse,
     TripletResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    CrossEncoderFactory,
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+)
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
 from utils.type_config import (
@@ -190,6 +195,7 @@ class GraphitiService:
         self.semaphore_limit = semaphore_limit
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.client: Graphiti | None = None
+        self.search_config = None
         self.entity_types: dict[str, type[BaseModel]] | None = None
         self.edge_types: dict[str, type[BaseModel]] | None = None
         self.edge_type_map: dict[tuple[str, str], list[str]] | None = None
@@ -200,6 +206,7 @@ class GraphitiService:
             # Create clients using factories
             llm_client = None
             embedder_client = None
+            cross_encoder = None
 
             # Create LLM client based on configured provider
             try:
@@ -213,6 +220,17 @@ class GraphitiService:
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
+            # Create CrossEncoder (reranker) client
+            try:
+                cross_encoder = CrossEncoderFactory.create(self.config.llm, logger)
+                if cross_encoder:
+                    logger.info(f'Cross-encoder client created: {type(cross_encoder).__name__}')
+                else:
+                    logger.info('No cross-encoder created, will use RRF reranking')
+            except Exception as e:
+                logger.warning(f'Failed to create cross-encoder, will use RRF: {str(e)}')
+                cross_encoder = None
+
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
 
@@ -225,7 +243,29 @@ class GraphitiService:
 
             # Initialize Graphiti client with appropriate driver
             try:
-                if self.config.database.provider.lower() == 'falkordb':
+                if self.config.database.provider.lower() == 'kuzu':
+                    # For Kuzu, create a KuzuDriver instance directly
+                    from graphiti_core.driver.kuzu_driver import KuzuDriver
+
+                    kuzu_driver = KuzuDriver(db=db_config['db'])
+
+                    # Use RRF search config if no cross-encoder (gateway mode)
+                    if cross_encoder is None:
+                        from graphiti_core.search.search_config_recipes import (
+                            COMBINED_HYBRID_SEARCH_RRF,
+                        )
+
+                        self.search_config = COMBINED_HYBRID_SEARCH_RRF
+                        logger.info('Using RRF reranking search configuration')
+
+                    self.client = Graphiti(
+                        graph_driver=kuzu_driver,
+                        llm_client=llm_client,
+                        embedder=embedder_client,
+                        cross_encoder=cross_encoder,
+                        max_coroutines=self.semaphore_limit,
+                    )
+                elif self.config.database.provider.lower() == 'falkordb':
                     # For FalkorDB, create a FalkorDriver instance directly
                     from graphiti_core.driver.falkordb_driver import FalkorDriver
 
@@ -236,20 +276,40 @@ class GraphitiService:
                         database=db_config['database'],
                     )
 
+                    # Use RRF search config if no cross-encoder (gateway mode)
+                    if cross_encoder is None:
+                        from graphiti_core.search.search_config_recipes import (
+                            COMBINED_HYBRID_SEARCH_RRF,
+                        )
+
+                        self.search_config = COMBINED_HYBRID_SEARCH_RRF
+                        logger.info('Using RRF reranking search configuration')
+
                     self.client = Graphiti(
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
-                    # For Neo4j (default), use the original approach
+                    # For Neo4j, use the original approach
+                    # Use RRF search config if no cross-encoder (gateway mode)
+                    if cross_encoder is None:
+                        from graphiti_core.search.search_config_recipes import (
+                            COMBINED_HYBRID_SEARCH_RRF,
+                        )
+
+                        self.search_config = COMBINED_HYBRID_SEARCH_RRF
+                        logger.info('Using RRF reranking search configuration')
+
                     self.client = Graphiti(
                         uri=db_config['uri'],
                         user=db_config['user'],
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:
@@ -558,6 +618,8 @@ async def search_memory_facts(
     max_facts: int = 10,
     center_node_uuid: str | None = None,
     edge_types: list[str] | None = None,
+    kinds: list[str] | None = None,
+    include_invalidated: bool = False,
     valid_at_after: str | None = None,
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
@@ -572,6 +634,10 @@ async def search_memory_facts(
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
         edge_types: Optional list of edge (fact) type names to filter by
+        kinds: Optional list of memory kinds to filter by. Valid values: "fact" (stable statements),
+            "plan" (intended future actions), "idea" (speculative thoughts). Defaults to all kinds.
+        include_invalidated: When True, include invalidated/expired facts in results (default: False).
+            Use this to see superseded plans or conflicting facts.
         valid_at_after: Optional ISO-8601 lower bound; only facts whose valid_at is at or
             after this time are returned (timezone-naive is treated as UTC)
         valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
@@ -588,10 +654,12 @@ async def search_memory_facts(
         if max_facts <= 0:
             return ErrorResponse(error='max_facts must be a positive integer')
 
-        # Build search filters from the optional edge-type / date-range params.
+        # Build search filters from the optional edge-type / kind / date-range params.
         try:
             search_filter = build_fact_search_filters(
                 edge_types=edge_types,
+                kinds=kinds,
+                include_invalidated=include_invalidated,
                 valid_at_after=valid_at_after,
                 valid_at_before=valid_at_before,
                 invalid_at_after=invalid_at_after,

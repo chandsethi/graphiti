@@ -264,6 +264,10 @@ class EntityEdge(Edge):
     name: str = Field(description='name of the edge, relation name')
     fact: str = Field(description='fact representing the edge and nodes that it connects')
     fact_embedding: list[float] | None = Field(default=None, description='embedding of the fact')
+    kind: str = Field(
+        default='fact',
+        description='kind of information: fact (stable statement), plan (intended future action), or idea (speculative thought)',
+    )
     episodes: list[str] = Field(
         default=[],
         description='list of episode ids that reference these entity edges',
@@ -279,6 +283,13 @@ class EntityEdge(Edge):
     )
     reference_time: datetime | None = Field(
         default=None, description='reference timestamp from the episode that produced this edge'
+    )
+    superseded_by: str | None = Field(
+        default=None, description='UUID of the edge that supersedes this one (for plans)'
+    )
+    conflicts_with: list[str] = Field(
+        default=[],
+        description='UUIDs of edges that conflict with this one (for contradictory facts)',
     )
     attributes: dict[str, Any] = Field(
         default={}, description='Additional attributes of the edge. Dependent on edge name'
@@ -347,12 +358,15 @@ class EntityEdge(Edge):
             'group_id': self.group_id,
             'fact': self.fact,
             'fact_embedding': self.fact_embedding,
+            'kind': self.kind,
             'episodes': self.episodes,
             'created_at': self.created_at,
             'expired_at': self.expired_at,
             'valid_at': self.valid_at,
             'invalid_at': self.invalid_at,
             'reference_time': self.reference_time,
+            'superseded_by': self.superseded_by,
+            'conflicts_with': self.conflicts_with,
         }
 
         if driver.provider == GraphProvider.KUZU:
@@ -969,6 +983,12 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
     episodes = record['episodes']
     if provider == GraphProvider.KUZU:
         attributes = json.loads(record['attributes']) if record['attributes'] else {}
+        conflicts_with_raw = record.get('conflicts_with', [])
+        conflicts_with = (
+            json.loads(conflicts_with_raw)
+            if isinstance(conflicts_with_raw, str)
+            else conflicts_with_raw or []
+        )
     else:
         attributes = record['attributes']
         attributes.pop('uuid', None)
@@ -978,12 +998,16 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
         attributes.pop('fact_embedding', None)
         attributes.pop('name', None)
         attributes.pop('group_id', None)
+        attributes.pop('kind', None)
         attributes.pop('episodes', None)
         attributes.pop('created_at', None)
         attributes.pop('expired_at', None)
         attributes.pop('valid_at', None)
         attributes.pop('invalid_at', None)
         attributes.pop('reference_time', None)
+        attributes.pop('superseded_by', None)
+        attributes.pop('conflicts_with', None)
+        conflicts_with = record.get('conflicts_with', []) or []
 
     edge = EntityEdge(
         uuid=record['uuid'],
@@ -993,12 +1017,15 @@ def get_entity_edge_from_record(record: Any, provider: GraphProvider) -> EntityE
         fact_embedding=record.get('fact_embedding'),
         name=record['name'],
         group_id=record['group_id'],
+        kind=record.get('kind', 'fact'),
         episodes=episodes,
         created_at=parse_db_date(record['created_at']),  # type: ignore
         expired_at=parse_db_date(record['expired_at']),
         valid_at=parse_db_date(record['valid_at']),
         invalid_at=parse_db_date(record['invalid_at']),
         reference_time=parse_db_date(record.get('reference_time')),
+        superseded_by=record.get('superseded_by'),
+        conflicts_with=conflicts_with,
         attributes=attributes,
     )
 
