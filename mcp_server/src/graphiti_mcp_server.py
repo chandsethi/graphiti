@@ -37,7 +37,12 @@ from models.response_types import (
     SuccessResponse,
     TripletResponse,
 )
-from services.factories import DatabaseDriverFactory, EmbedderFactory, LLMClientFactory
+from services.factories import (
+    CrossEncoderFactory,
+    DatabaseDriverFactory,
+    EmbedderFactory,
+    LLMClientFactory,
+)
 from services.queue_service import QueueService
 from utils.formatting import format_fact_result, to_edge_result, to_node_result
 from utils.type_config import (
@@ -200,6 +205,7 @@ class GraphitiService:
             # Create clients using factories
             llm_client = None
             embedder_client = None
+            cross_encoder = None
 
             # Create LLM client based on configured provider
             try:
@@ -209,9 +215,20 @@ class GraphitiService:
 
             # Create embedder client based on configured provider
             try:
-                embedder_client = EmbedderFactory.create(self.config.embedder)
+                embedder_client = EmbedderFactory.create(self.config.embedder, logger)
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
+
+            # Create CrossEncoder (reranker) client
+            try:
+                cross_encoder = CrossEncoderFactory.create(self.config.llm, logger)
+                if cross_encoder:
+                    logger.info(f'Cross-encoder client created: {type(cross_encoder).__name__}')
+                else:
+                    logger.info('No cross-encoder created, will use RRF reranking')
+            except Exception as e:
+                logger.warning(f'Failed to create cross-encoder, will use RRF: {str(e)}')
+                cross_encoder = None
 
             # Get database configuration
             db_config = DatabaseDriverFactory.create_config(self.config.database)
@@ -231,10 +248,22 @@ class GraphitiService:
 
                     kuzu_driver = KuzuDriver(db=db_config['db'])
 
+                    # Use RRF search config if no cross-encoder (gateway mode)
+                    search_config = None
+                    if cross_encoder is None:
+                        from graphiti_core.search.search_config_recipes import (
+                            COMBINED_HYBRID_SEARCH_RRF,
+                        )
+
+                        search_config = COMBINED_HYBRID_SEARCH_RRF
+                        self.logger.info('Using RRF reranking search configuration')
+
                     self.client = Graphiti(
                         graph_driver=kuzu_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
+                        search_config=search_config,
                         max_coroutines=self.semaphore_limit,
                     )
                 elif self.config.database.provider.lower() == 'falkordb':
@@ -248,20 +277,44 @@ class GraphitiService:
                         database=db_config['database'],
                     )
 
+                    # Use RRF search config if no cross-encoder (gateway mode)
+                    search_config = None
+                    if cross_encoder is None:
+                        from graphiti_core.search.search_config_recipes import (
+                            COMBINED_HYBRID_SEARCH_RRF,
+                        )
+
+                        search_config = COMBINED_HYBRID_SEARCH_RRF
+                        self.logger.info('Using RRF reranking search configuration')
+
                     self.client = Graphiti(
                         graph_driver=falkor_driver,
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
+                        search_config=search_config,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
                     # For Neo4j, use the original approach
+                    # Use RRF search config if no cross-encoder (gateway mode)
+                    search_config = None
+                    if cross_encoder is None:
+                        from graphiti_core.search.search_config_recipes import (
+                            COMBINED_HYBRID_SEARCH_RRF,
+                        )
+
+                        search_config = COMBINED_HYBRID_SEARCH_RRF
+                        self.logger.info('Using RRF reranking search configuration')
+
                     self.client = Graphiti(
                         uri=db_config['uri'],
                         user=db_config['user'],
                         password=db_config['password'],
                         llm_client=llm_client,
                         embedder=embedder_client,
+                        cross_encoder=cross_encoder,
+                        search_config=search_config,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:

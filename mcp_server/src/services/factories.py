@@ -1,5 +1,6 @@
 """Factory classes for creating LLM, Embedder, and Database clients."""
 
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
 from graphiti_core.embedder import EmbedderClient, OpenAIEmbedder
 from graphiti_core.llm_client import LLMClient, OpenAIClient
 from graphiti_core.llm_client.config import LLMConfig as GraphitiLLMConfig
@@ -499,6 +500,70 @@ class EmbedderFactory:
 
             case _:
                 raise ValueError(f'Unsupported Embedder provider: {provider}')
+
+
+class CrossEncoderFactory:
+    """Factory for creating cross-encoder (reranker) clients."""
+
+    @staticmethod
+    def create(config: LLMConfig, logger) -> OpenAIRerankerClient | None:
+        """
+        Create a cross-encoder client based on configuration.
+
+        For custom base URLs (e.g., gateways), returns None to indicate RRF should be used.
+        Otherwise creates an OpenAI reranker client.
+
+        Args:
+            config: LLM configuration
+            logger: Logger instance
+
+        Returns:
+            OpenAIRerankerClient or None (to use RRF reranking)
+        """
+        import os
+
+        provider = config.provider.lower()
+
+        if provider != 'openai':
+            # Only OpenAI reranker is supported currently
+            logger.info(
+                f'Cross-encoder reranking not supported for {provider}, will use RRF reranking'
+            )
+            return None
+
+        # Check if using custom base URL (gateway)
+        base_url = os.environ.get('OPENAI_BASE_URL')
+        if not base_url and config.providers.openai:
+            base_url = config.providers.openai.api_url
+
+        if base_url and base_url != 'https://api.openai.com/v1':
+            # Custom gateway - use RRF instead of cross-encoder
+            logger.info(
+                f'Custom base URL detected ({base_url}), using RRF reranking instead of cross-encoder'
+            )
+            return None
+
+        # Standard OpenAI - create reranker client
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key and config.providers.openai:
+            api_key = config.providers.openai.api_key
+        if not api_key:
+            logger.info('No OPENAI_API_KEY found for reranker, will use RRF reranking')
+            return None
+
+        # Use small model for reranking
+        model = os.environ.get('LLM_SMALL_MODEL', os.environ.get('LLM_MODEL', config.model))
+
+        logger.info(f'Reranker endpoint: {base_url or "https://api.openai.com/v1"}')
+        logger.info(f'Reranker model: {model}')
+
+        reranker_config = GraphitiLLMConfig(
+            api_key=api_key,
+            model=model,
+            base_url=base_url or 'https://api.openai.com/v1',
+        )
+
+        return OpenAIRerankerClient(config=reranker_config)
 
 
 class DatabaseDriverFactory:
