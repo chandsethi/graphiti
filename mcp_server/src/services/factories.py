@@ -137,19 +137,41 @@ class LLMClientFactory:
             case 'openai':
                 # Check environment variable first, then config
                 import os
+                import json
 
+                # API Key - allow dummy value for custom gateways with header auth
                 api_key = os.environ.get('OPENAI_API_KEY')
                 if not api_key and config.providers.openai:
                     api_key = config.providers.openai.api_key
+                if not api_key:
+                    # Use placeholder for gateways that don't need it
+                    api_key = 'not-needed'
+                    logger.info('No OPENAI_API_KEY found, using placeholder for custom gateway')
 
-                _validate_api_key('OpenAI', api_key, logger)
+                # Base URL - support custom endpoints
+                api_url = os.environ.get('OPENAI_BASE_URL')
+                if not api_url and config.providers.openai:
+                    api_url = config.providers.openai.api_url
+                if not api_url:
+                    api_url = 'https://api.openai.com/v1'
 
-                # Get API URL from config or use default
-                api_url = (
-                    config.providers.openai.api_url
-                    if config.providers.openai
-                    else 'https://api.openai.com/v1'
-                )
+                # Model names - support custom model naming
+                model = os.environ.get('LLM_MODEL', config.model)
+                small_model = os.environ.get('LLM_SMALL_MODEL', config.model)
+
+                # Extra headers for custom gateways (e.g., Bifrost)
+                extra_headers = {}
+                if os.environ.get('LLM_EXTRA_HEADERS'):
+                    try:
+                        extra_headers = json.loads(os.environ['LLM_EXTRA_HEADERS'])
+                    except json.JSONDecodeError:
+                        logger.warning('Failed to parse LLM_EXTRA_HEADERS as JSON, ignoring')
+
+                # Convenience: BIFROST_VK or LLM_VK_HEADER for x-bf-vk header
+                if os.environ.get('BIFROST_VK'):
+                    extra_headers['x-bf-vk'] = os.environ['BIFROST_VK']
+                elif os.environ.get('LLM_VK_HEADER'):
+                    extra_headers['x-bf-vk'] = os.environ['LLM_VK_HEADER']
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
@@ -158,7 +180,7 @@ class LLMClientFactory:
 
                 llm_config = CoreLLMConfig(
                     api_key=api_key,
-                    model=config.model,
+                    model=model,
                     small_model=small_model,
                     # None is intentional for reasoning models; core LLMConfig stores it
                     # verbatim and downstream clients omit temperature when it is None.
@@ -167,17 +189,33 @@ class LLMClientFactory:
                     base_url=api_url,
                 )
 
-                # Detect if we're using a non-OpenAI provider (Ollama, LM Studio, etc)
+                # Use generic client for custom base URLs (they typically only support /chat/completions)
+                # The generic client uses standard Chat Completions API with JSON mode
                 use_generic_client = is_non_openai_provider(api_url)
 
+                logger.info(f'LLM endpoint: {api_url}')
+                logger.info(f'LLM model: {model}')
+                if extra_headers:
+                    logger.info(f'LLM extra headers: {list(extra_headers.keys())}')
+
                 if use_generic_client:
-                    # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
-                    # This uses the standard Chat Completions API instead of Responses API
-                    return OpenAIGenericClient(config=llm_config, max_tokens=config.max_tokens)
+                    # Use OpenAIGenericClient for custom gateways and OpenAI-compatible providers
+                    # This uses the standard Chat Completions API with JSON mode
+                    from openai import AsyncOpenAI
+
+                    openai_client = AsyncOpenAI(
+                        api_key=api_key,
+                        base_url=api_url,
+                        default_headers=extra_headers if extra_headers else None,
+                    )
+                    client = OpenAIGenericClient(
+                        config=llm_config, max_tokens=config.max_tokens, client=openai_client
+                    )
+                    return client
                 else:
                     # Use OpenAIClient for official OpenAI API (supports Responses API).
                     # Reasoning models get a reasoning effort; others must not.
-                    effort = reasoning_effort_for_model(config.model)
+                    effort = reasoning_effort_for_model(model)
                     if effort is not None:
                         return OpenAIClient(config=llm_config, reasoning=effort, verbosity='low')
                     return OpenAIClient(config=llm_config)
@@ -319,29 +357,67 @@ class EmbedderFactory:
             case 'openai':
                 # Check environment variable first, then config
                 import os
+                import json
 
+                # API Key - allow dummy value for custom gateways
                 api_key = os.environ.get('OPENAI_API_KEY')
                 if not api_key and config.providers.openai:
                     api_key = config.providers.openai.api_key
+                if not api_key:
+                    api_key = 'not-needed'
+                    logger.info(
+                        'No OPENAI_API_KEY found, using placeholder for custom gateway embedder'
+                    )
 
-                _validate_api_key('OpenAI Embedder', api_key, logger)
+                # Base URL - support custom endpoints (same as LLM)
+                api_url = os.environ.get('OPENAI_BASE_URL')
+                if not api_url and config.providers.openai:
+                    api_url = config.providers.openai.api_url
+                if not api_url:
+                    api_url = 'https://api.openai.com/v1'
 
-                # Get API URL from config or use default
-                api_url = (
-                    config.providers.openai.api_url
-                    if config.providers.openai
-                    else 'https://api.openai.com/v1'
-                )
+                # Model name - support custom naming
+                embedding_model = os.environ.get('EMBEDDER_MODEL', config.model)
+
+                # Extra headers (same as LLM)
+                extra_headers = {}
+                if os.environ.get('LLM_EXTRA_HEADERS'):
+                    try:
+                        extra_headers = json.loads(os.environ['LLM_EXTRA_HEADERS'])
+                    except json.JSONDecodeError:
+                        logger.warning('Failed to parse LLM_EXTRA_HEADERS as JSON, ignoring')
+
+                if os.environ.get('BIFROST_VK'):
+                    extra_headers['x-bf-vk'] = os.environ['BIFROST_VK']
+                elif os.environ.get('LLM_VK_HEADER'):
+                    extra_headers['x-bf-vk'] = os.environ['LLM_VK_HEADER']
+
+                logger.info(f'Embedder endpoint: {api_url}')
+                logger.info(f'Embedder model: {embedding_model}')
+                if extra_headers:
+                    logger.info(f'Embedder extra headers: {list(extra_headers.keys())}')
 
                 from graphiti_core.embedder.openai import OpenAIEmbedderConfig
 
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
-                    embedding_model=config.model,
-                    base_url=api_url,  # Support custom endpoints like Ollama
-                    embedding_dim=config.dimensions,  # Support custom embedding dimensions
+                    embedding_model=embedding_model,
+                    base_url=api_url,
+                    embedding_dim=config.dimensions,
                 )
-                return OpenAIEmbedder(config=embedder_config)
+
+                # Pass extra headers if present
+                if extra_headers:
+                    from openai import AsyncOpenAI
+
+                    openai_client = AsyncOpenAI(
+                        api_key=api_key,
+                        base_url=api_url,
+                        default_headers=extra_headers,
+                    )
+                    return OpenAIEmbedder(config=embedder_config, client=openai_client)
+                else:
+                    return OpenAIEmbedder(config=embedder_config)
 
             case 'azure_openai':
                 if not HAS_AZURE_EMBEDDER:

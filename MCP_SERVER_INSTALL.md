@@ -30,9 +30,38 @@ That's it! No config file needed. The server will:
 - Use embedded Kuzu database at `~/.graphiti/kuzu.db`
 - Work from any working directory
 
+### Custom LLM Gateway (e.g., Bifrost, Ollama, LM Studio)
+
+For OpenAI-compatible gateways with custom authentication:
+
+```toml
+[mcp_servers.graphiti]
+command = "graphiti-mcp-server"
+
+[mcp_servers.graphiti.env]
+OPENAI_BASE_URL = "https://bifrost-llm-proxy-alb-0.cmd.hotstar-prod.com/openai/v1"
+LLM_EXTRA_HEADERS = "{\"x-bf-vk\":\"<your-virtual-key>\"}"
+LLM_MODEL = "openai.gpt-4o-mini"
+EMBEDDER_MODEL = "openai.text-embedding-3-small"
+```
+
+Or use the convenience var for Bifrost:
+
+```toml
+[mcp_servers.graphiti]
+command = "graphiti-mcp-server"
+
+[mcp_servers.graphiti.env]
+OPENAI_BASE_URL = "https://your-gateway.com/openai/v1"
+BIFROST_VK = "<your-virtual-key>"
+LLM_MODEL = "google.gemma-3-27b-it"
+```
+
+**Note**: The server uses the generic OpenAI client (`/chat/completions`) for custom base URLs, which works with most OpenAI-compatible gateways. Set `OPENAI_API_KEY` to any dummy value if your gateway doesn't need it.
+
 ### Alternative LLM Providers
 
-Graphiti supports multiple LLM providers:
+Native provider support (not through a gateway):
 
 ```toml
 # Anthropic
