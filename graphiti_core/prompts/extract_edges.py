@@ -37,6 +37,10 @@ class Edge(BaseModel):
         ...,
         description='A natural language description of the relationship between the entities, paraphrased from the source text',
     )
+    kind: str = Field(
+        default='fact',
+        description='The kind of information: "fact" (stable statement about how things are or were), "plan" (intended or committed future action that may change), or "idea" (speculative thought or possibility nobody has committed to). Use "fact" unless the text clearly describes an intention or speculation.',
+    )
     valid_at: str | None = Field(
         None,
         description='The date and time when the relationship described by the edge fact became true or was established. Use ISO 8601 format (YYYY-MM-DDTHH:MM:SS.SSSSSSZ)',
@@ -146,6 +150,11 @@ You may use information from the PREVIOUS MESSAGES only to disambiguate referenc
 1. **Entity Name Validation**: `source_entity_name` and `target_entity_name` must use only the `name` values from the ENTITIES list provided above.
    - **CRITICAL**: Using names not in the list will cause the edge to be rejected
 2. Each fact must involve two **distinct** entities — `source_entity_name` and `target_entity_name` NEVER refer to the same entity.
+3. **Kind Classification**: For each fact, classify its kind:
+   - **fact**: Use for stable statements about reality (how things are, were, or have been). Examples: "Alice works at Acme Corp", "Bob graduated in 2020", "The office is in Seattle".
+   - **plan**: Use for commitments, intentions, or future actions someone plans to do. Examples: "Alice will interview candidates next week", "Bob intends to relocate to Austin", "The team plans to ship the feature by Q2".
+   - **idea**: Use for speculative thoughts, possibilities, or brainstorms nobody has committed to yet. Examples: "Alice is considering switching careers", "Bob might travel to Japan", "The team discussed possibly trying a new framework".
+   - **Default to "fact"** unless the statement clearly expresses intention (plan) or speculation (idea). Present-tense descriptions of current reality or past events are facts.
 3. Prefer facts that involve two distinct entities from the ENTITIES list. When a sentence describes a specific, concrete detail about a single entity (a brand name, a specific item, a physical description, a quantity, a location, a named activity), do NOT drop it. Instead, look for a second entity in the ENTITIES list that the detail relates to and form a proper triple (e.g., Entity -> OWNS -> item-entity, Entity -> LIVES_IN -> place-entity, Entity -> HAS_ATTRIBUTE -> detail-entity). Only skip the fact when no second entity in the ENTITIES list can anchor the detail.
    - BAD: "Alice feels happy" (vague single-entity state with no concrete detail — what is Alice happy about?)
    - GOOD: "Alice feels happy about Bob's promotion" → Alice -> FEELS_HAPPY_ABOUT -> Bob's promotion

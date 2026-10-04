@@ -536,12 +536,14 @@ async def resolve_extracted_edges(
 
 
 def resolve_edge_contradictions(
-    resolved_edge: EntityEdge, invalidation_candidates: list[EntityEdge]
+    resolved_edge: EntityEdge,
+    invalidation_candidates: list[EntityEdge],
+    is_correction: bool = False,
 ) -> list[EntityEdge]:
     if len(invalidation_candidates) == 0:
         return []
 
-    # Determine which contradictory edges need to be expired
+    # Determine which contradictory edges need to be expired or marked as conflicting
     invalidated_edges: list[EntityEdge] = []
     for edge in invalidation_candidates:
         # (Edge invalid before new edge becomes valid) or (new edge invalid before edge becomes valid)
@@ -560,7 +562,33 @@ def resolve_edge_contradictions(
             and resolved_edge_invalid_at_utc <= edge_valid_at_utc
         ):
             continue
-        # New edge invalidates edge
+
+        # Kind-aware resolution
+        if resolved_edge.kind == 'plan' and edge.kind == 'plan':
+            # Plans supersede older plans
+            edge.invalid_at = resolved_edge.valid_at if resolved_edge.valid_at else utc_now()
+            edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
+            edge.superseded_by = resolved_edge.uuid
+            invalidated_edges.append(edge)
+        elif resolved_edge.kind == 'idea' or edge.kind == 'idea':
+            # Ideas never invalidate or conflict with anything
+            continue
+        elif resolved_edge.kind == 'fact' and edge.kind == 'fact':
+            # Facts: distinguish between corrections and conflicts
+            if is_correction:
+                # Correction: invalidate the old fact
+                edge.invalid_at = resolved_edge.valid_at if resolved_edge.valid_at else utc_now()
+                edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
+                invalidated_edges.append(edge)
+            else:
+                # Conflict: keep both and mark them as conflicting
+                if resolved_edge.uuid not in edge.conflicts_with:
+                    edge.conflicts_with.append(resolved_edge.uuid)
+                if edge.uuid not in resolved_edge.conflicts_with:
+                    resolved_edge.conflicts_with.append(edge.uuid)
+                # Still add to invalidated_edges so it gets saved with the conflict marker
+                invalidated_edges.append(edge)
+        # New edge invalidates edge (temporal check for facts)
         elif (
             edge_valid_at_utc is not None
             and resolved_edge_valid_at_utc is not None
@@ -697,18 +725,20 @@ async def resolve_extracted_edge(
     start = time()
 
     # Prepare context for LLM with continuous indexing
-    related_edges_context = [{'idx': i, 'fact': edge.fact} for i, edge in enumerate(related_edges)]
+    related_edges_context = [
+        {'idx': i, 'fact': edge.fact, 'kind': edge.kind} for i, edge in enumerate(related_edges)
+    ]
 
     # Invalidation candidates start where duplicate candidates end
     invalidation_idx_offset = len(related_edges)
     invalidation_edge_candidates_context = [
-        {'idx': invalidation_idx_offset + i, 'fact': existing_edge.fact}
+        {'idx': invalidation_idx_offset + i, 'fact': existing_edge.fact, 'kind': existing_edge.kind}
         for i, existing_edge in enumerate(existing_edges)
     ]
 
     context = {
         'existing_edges': related_edges_context,
-        'new_edge': extracted_edge.fact,
+        'new_edge': {'fact': extracted_edge.fact, 'kind': extracted_edge.kind},
         'edge_invalidation_candidates': invalidation_edge_candidates_context,
     }
 
@@ -731,6 +761,7 @@ async def resolve_extracted_edge(
     )
     response_object = EdgeDuplicate(**llm_response)
     duplicate_facts = response_object.duplicate_facts
+    is_correction = response_object.is_correction
 
     # Validate duplicate_facts are in valid range for EXISTING FACTS
     invalid_duplicates = [i for i in duplicate_facts if i < 0 or i >= len(related_edges)]
@@ -838,9 +869,9 @@ async def resolve_extracted_edge(
                 resolved_edge.expired_at = now
                 break
 
-    # Determine which contradictory edges need to be expired
+    # Determine which contradictory edges need to be expired or marked as conflicting
     invalidated_edges: list[EntityEdge] = resolve_edge_contradictions(
-        resolved_edge, invalidation_candidates
+        resolved_edge, invalidation_candidates, is_correction
     )
     duplicate_edges: list[EntityEdge] = [related_edges[idx] for idx in duplicate_fact_ids]
 

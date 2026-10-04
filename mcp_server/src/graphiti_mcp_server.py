@@ -558,6 +558,8 @@ async def search_memory_facts(
     max_facts: int = 10,
     center_node_uuid: str | None = None,
     edge_types: list[str] | None = None,
+    kinds: list[str] | None = None,
+    include_invalidated: bool = False,
     valid_at_after: str | None = None,
     valid_at_before: str | None = None,
     invalid_at_after: str | None = None,
@@ -572,6 +574,10 @@ async def search_memory_facts(
         max_facts: Maximum number of facts to return (default: 10)
         center_node_uuid: Optional UUID of a node to center the search around
         edge_types: Optional list of edge (fact) type names to filter by
+        kinds: Optional list of memory kinds to filter by. Valid values: "fact" (stable statements),
+            "plan" (intended future actions), "idea" (speculative thoughts). Defaults to all kinds.
+        include_invalidated: When True, include invalidated/expired facts in results (default: False).
+            Use this to see superseded plans or conflicting facts.
         valid_at_after: Optional ISO-8601 lower bound; only facts whose valid_at is at or
             after this time are returned (timezone-naive is treated as UTC)
         valid_at_before: Optional ISO-8601 upper bound on a fact's valid_at
@@ -588,10 +594,12 @@ async def search_memory_facts(
         if max_facts <= 0:
             return ErrorResponse(error='max_facts must be a positive integer')
 
-        # Build search filters from the optional edge-type / date-range params.
+        # Build search filters from the optional edge-type / kind / date-range params.
         try:
             search_filter = build_fact_search_filters(
                 edge_types=edge_types,
+                kinds=kinds,
+                include_invalidated=include_invalidated,
                 valid_at_after=valid_at_after,
                 valid_at_before=valid_at_before,
                 invalid_at_after=invalid_at_after,

@@ -92,11 +92,14 @@ def get_entity_edge_save_query(provider: GraphProvider, has_aoss: bool = False) 
                     e.name = $name,
                     e.fact = $fact,
                     e.fact_embedding = $fact_embedding,
+                    e.kind = $kind,
                     e.episodes = $episodes,
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
                     e.reference_time = $reference_time,
+                    e.superseded_by = $superseded_by,
+                    e.conflicts_with = $conflicts_with,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -157,11 +160,14 @@ def get_entity_edge_save_bulk_query(provider: GraphProvider, has_aoss: bool = Fa
                     e.name = $name,
                     e.fact = $fact,
                     e.fact_embedding = $fact_embedding,
+                    e.kind = $kind,
                     e.episodes = $episodes,
                     e.expired_at = $expired_at,
                     e.valid_at = $valid_at,
                     e.invalid_at = $invalid_at,
                     e.reference_time = $reference_time,
+                    e.superseded_by = $superseded_by,
+                    e.conflicts_with = $conflicts_with,
                     e.attributes = $attributes
                 RETURN e.uuid AS uuid
             """
@@ -197,11 +203,14 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.group_id AS group_id,
         e.name AS name,
         e.fact AS fact,
+        e.kind AS kind,
         split(e.episodes, ',') AS episodes,
         e.created_at AS created_at,
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
+        e.superseded_by AS superseded_by,
+        split(COALESCE(e.conflicts_with, ''), ',') AS conflicts_with,
         properties(e) AS attributes
     """
 
@@ -213,10 +222,13 @@ def get_entity_edge_return_query(provider: GraphProvider) -> str:
         e.created_at AS created_at,
         e.name AS name,
         e.fact AS fact,
+        e.kind AS kind,
         e.episodes AS episodes,
         e.expired_at AS expired_at,
         e.valid_at AS valid_at,
         e.invalid_at AS invalid_at,
+        e.superseded_by AS superseded_by,
+        e.conflicts_with AS conflicts_with,
     """ + (
         'e.attributes AS attributes'
         if provider == GraphProvider.KUZU

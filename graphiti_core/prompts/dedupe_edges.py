@@ -30,6 +30,10 @@ class EdgeDuplicate(BaseModel):
         ...,
         description='List of idx values of contradicted facts (from full idx range). Empty list if none.',
     )
+    is_correction: bool = Field(
+        default=False,
+        description='True if the NEW FACT explicitly corrects or updates an old fact (e.g., moved from A to B, changed from X to Y). False for genuine disagreements or conflicts where both could be true in different contexts.',
+    )
 
 
 class Prompt(Protocol):
@@ -44,7 +48,8 @@ def resolve_edge(context: dict[str, Any]) -> list[Message]:
     return [
         Message(
             role='system',
-            content='You are a fact deduplication assistant. '
+            content='You are a fact deduplication and resolution assistant. '
+            'You handle facts, plans, and ideas differently based on their kind. '
             'NEVER mark facts with key differences as duplicates.',
         ),
         Message(
@@ -56,6 +61,7 @@ IMPORTANT constraints:
 - duplicate_facts: ONLY idx values from EXISTING FACTS (NEVER include FACT INVALIDATION CANDIDATES)
 - contradicted_facts: idx values from EITHER list (EXISTING FACTS or FACT INVALIDATION CANDIDATES)
 - The idx values are continuous across both lists (INVALIDATION CANDIDATES start where EXISTING FACTS end)
+- is_correction: True only when the NEW FACT explicitly corrects an old fact or describes a change of state over time
 
 <EXISTING FACTS>
 {context['existing_edges']}
@@ -72,29 +78,53 @@ IMPORTANT constraints:
 You will receive TWO lists of facts with CONTINUOUS idx numbering across both lists.
 EXISTING FACTS are indexed first, followed by FACT INVALIDATION CANDIDATES.
 
-1. DUPLICATE DETECTION:
-   - If the NEW FACT represents identical factual information as any fact in EXISTING FACTS, return those idx values in duplicate_facts.
-   - If no duplicates, return an empty list for duplicate_facts.
+# KIND-AWARE RESOLUTION RULES
 
+The NEW FACT has a "kind" field: "fact", "plan", or "idea". Apply different rules based on kind:
+
+## FACT (stable statements)
+1. DUPLICATE DETECTION: If identical to an existing fact, mark as duplicate.
 2. CONTRADICTION DETECTION:
-   - Determine which facts the NEW FACT contradicts from either list.
-   - A fact from EXISTING FACTS can be both a duplicate AND contradicted (e.g., semantically the same but the new fact updates/supersedes it).
-   - Return all contradicted idx values in contradicted_facts.
-   - If no contradictions, return an empty list for contradicted_facts.
+   - If the NEW FACT explicitly corrects or updates an old fact (e.g., "moved from Delhi to Bangalore", "changed title from X to Y"), mark the old fact as contradicted AND set is_correction=True.
+   - If the NEW FACT contradicts an old fact but is NOT a correction (e.g., two different sources say different things, genuine disagreement), mark as contradicted but set is_correction=False. The old fact will be kept and marked as conflicting rather than invalidated.
 
-<EXAMPLE>
-EXISTING FACT: idx=0, "Alice joined Acme Corp in 2020"
-NEW FACT: "Alice joined Acme Corp in 2020"
-Result: duplicate_facts=[0], contradicted_facts=[] (identical factual information)
+## PLAN (intended future actions)
+1. DUPLICATE DETECTION: If identical to an existing plan, mark as duplicate.
+2. CONTRADICTION DETECTION: If the NEW FACT is a plan about the same subject/goal as an existing plan, mark the old plan as contradicted (the new plan supersedes it). Set is_correction=True.
 
-EXISTING FACT: idx=1, "Alice works at Acme Corp as a software engineer"
-NEW FACT: "Alice works at Acme Corp as a senior engineer"
-Result: duplicate_facts=[], contradicted_facts=[1] (same relationship but updated title — contradiction, NOT a duplicate)
+## IDEA (speculative thoughts)
+1. DUPLICATE DETECTION: Only mark as duplicate if the idea is identical.
+2. CONTRADICTION DETECTION: Ideas NEVER contradict facts or plans, and facts/plans never contradict ideas. An idea can only duplicate another identical idea.
 
-EXISTING FACT: idx=2, "Bob ran 5 miles on Tuesday"
-NEW FACT: "Bob ran 3 miles on Wednesday"
-Result: duplicate_facts=[], contradicted_facts=[] (different events on different days — neither duplicate nor contradiction)
-</EXAMPLE>
+<EXAMPLES>
+EXISTING FACT (kind=fact): idx=0, "Alice joined Acme Corp in 2020"
+NEW FACT (kind=fact): "Alice joined Acme Corp in 2020"
+Result: duplicate_facts=[0], contradicted_facts=[], is_correction=False (identical)
+
+EXISTING FACT (kind=fact): idx=1, "Alice works at Acme Corp"
+NEW FACT (kind=fact): "Alice works at TechCo"
+Result: duplicate_facts=[], contradicted_facts=[1], is_correction=True (moved companies — correction)
+
+EXISTING FACT (kind=fact): idx=2, "The capital of country X is City A" (from source 1)
+NEW FACT (kind=fact): "The capital of country X is City B" (from source 2)
+Result: duplicate_facts=[], contradicted_facts=[2], is_correction=False (disagreement, not correction — both kept and marked as conflict)
+
+EXISTING FACT (kind=plan): idx=3, "Bob plans to interview candidates next Tuesday"
+NEW FACT (kind=plan): "Bob plans to interview candidates next Friday"
+Result: duplicate_facts=[], contradicted_facts=[3], is_correction=True (new plan supersedes old)
+
+EXISTING FACT (kind=fact): idx=4, "Alice works at Acme Corp"
+NEW FACT (kind=idea): "Alice is considering switching to TechCo"
+Result: duplicate_facts=[], contradicted_facts=[] (idea doesn't contradict fact)
+
+EXISTING FACT (kind=idea): idx=5, "Bob might travel to Japan"
+NEW FACT (kind=plan): "Bob plans to travel to France"
+Result: duplicate_facts=[], contradicted_facts=[] (plan doesn't contradict idea; different subjects anyway)
+
+EXISTING FACT (kind=idea): idx=6, "The team discussed possibly trying React"
+NEW FACT (kind=idea): "The team discussed possibly trying React"
+Result: duplicate_facts=[6], contradicted_facts=[] (identical idea)
+</EXAMPLES>
 """,
         ),
     ]
