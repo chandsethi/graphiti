@@ -215,7 +215,7 @@ class GraphitiService:
 
             # Create embedder client based on configured provider
             try:
-                embedder_client = EmbedderFactory.create(self.config.embedder, logger)
+                embedder_client = EmbedderFactory.create(self.config.embedder)
             except Exception as e:
                 logger.warning(f'Failed to create embedder client: {e}')
 
@@ -285,7 +285,7 @@ class GraphitiService:
                         )
 
                         search_config = COMBINED_HYBRID_SEARCH_RRF
-                        self.logger.info('Using RRF reranking search configuration')
+                        logger.info('Using RRF reranking search configuration')
 
                     self.client = Graphiti(
                         graph_driver=falkor_driver,
@@ -305,7 +305,7 @@ class GraphitiService:
                         )
 
                         search_config = COMBINED_HYBRID_SEARCH_RRF
-                        self.logger.info('Using RRF reranking search configuration')
+                        logger.info('Using RRF reranking search configuration')
 
                     self.client = Graphiti(
                         uri=db_config['uri'],
