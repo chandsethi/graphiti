@@ -22,7 +22,9 @@ async def test_mcp_server():
         'BIFROST_VK': 'vk-test-123',
         'LLM_MODEL': 'openai.gpt-4o-mini',
         'EMBEDDER_MODEL': 'openai.text-embedding-3-small',
+        'DATABASE_PROVIDER': 'kuzu',
         'PATH': os.environ.get('PATH', ''),
+        'HOME': os.environ.get('HOME', ''),
     }
 
     # Server parameters
