@@ -10,7 +10,10 @@ Install directly from this git branch using `uv`:
 uv tool install --python 3.12 "git+https://github.com/chandsethi/graphiti.git@cursor/memory-kind-tracking-b83a#subdirectory=mcp_server"
 ```
 
-This will install the `graphiti-mcp-server` command.
+This installs the `graphiti-mcp-server` command with:
+- Embedded Kuzu database (no Docker or external server needed)
+- Local storage at `~/.graphiti/kuzu.db`
+- All memory kind tracking features
 
 ## Codex Configuration
 
@@ -21,6 +24,11 @@ Add the following to your `~/.codex/config.toml`:
 command = "graphiti-mcp-server"
 env = { OPENAI_API_KEY = "<your-key-here>" }
 ```
+
+That's it! No config file needed. The server will:
+- Start over stdio when Codex launches it
+- Use embedded Kuzu database at `~/.graphiti/kuzu.db`
+- Work from any working directory
 
 ### Alternative LLM Providers
 
