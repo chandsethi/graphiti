@@ -229,7 +229,7 @@ class GraphitiService:
                     # For Kuzu, create a KuzuDriver instance directly
                     from graphiti_core.driver.kuzu_driver import KuzuDriver
 
-                    kuzu_driver = KuzuDriver(db_path=db_config['db_path'])
+                    kuzu_driver = KuzuDriver(db=db_config['db'])
 
                     self.client = Graphiti(
                         graph_driver=kuzu_driver,

@@ -135,11 +135,21 @@ class LLMClientFactory:
 
         match provider:
             case 'openai':
-                if not config.providers.openai:
-                    raise ValueError('OpenAI provider configuration not found')
+                # Check environment variable first, then config
+                import os
 
-                api_key = config.providers.openai.api_key
+                api_key = os.environ.get('OPENAI_API_KEY')
+                if not api_key and config.providers.openai:
+                    api_key = config.providers.openai.api_key
+
                 _validate_api_key('OpenAI', api_key, logger)
+
+                # Get API URL from config or use default
+                api_url = (
+                    config.providers.openai.api_url
+                    if config.providers.openai
+                    else 'https://api.openai.com/v1'
+                )
 
                 from graphiti_core.llm_client.config import LLMConfig as CoreLLMConfig
 
@@ -154,11 +164,11 @@ class LLMClientFactory:
                     # verbatim and downstream clients omit temperature when it is None.
                     temperature=config.temperature,  # type: ignore[arg-type]
                     max_tokens=config.max_tokens,
-                    base_url=config.providers.openai.api_url,
+                    base_url=api_url,
                 )
 
                 # Detect if we're using a non-OpenAI provider (Ollama, LM Studio, etc)
-                use_generic_client = is_non_openai_provider(config.providers.openai.api_url)
+                use_generic_client = is_non_openai_provider(api_url)
 
                 if use_generic_client:
                     # Use OpenAIGenericClient for Ollama and other OpenAI-compatible providers
@@ -307,18 +317,28 @@ class EmbedderFactory:
 
         match provider:
             case 'openai':
-                if not config.providers.openai:
-                    raise ValueError('OpenAI provider configuration not found')
+                # Check environment variable first, then config
+                import os
 
-                api_key = config.providers.openai.api_key
+                api_key = os.environ.get('OPENAI_API_KEY')
+                if not api_key and config.providers.openai:
+                    api_key = config.providers.openai.api_key
+
                 _validate_api_key('OpenAI Embedder', api_key, logger)
+
+                # Get API URL from config or use default
+                api_url = (
+                    config.providers.openai.api_url
+                    if config.providers.openai
+                    else 'https://api.openai.com/v1'
+                )
 
                 from graphiti_core.embedder.openai import OpenAIEmbedderConfig
 
                 embedder_config = OpenAIEmbedderConfig(
                     api_key=api_key,
                     embedding_model=config.model,
-                    base_url=config.providers.openai.api_url,  # Support custom endpoints like Ollama
+                    base_url=api_url,  # Support custom endpoints like Ollama
                     embedding_dim=config.dimensions,  # Support custom embedding dimensions
                 )
                 return OpenAIEmbedder(config=embedder_config)
@@ -502,7 +522,7 @@ class DatabaseDriverFactory:
 
                 return {
                     'driver': 'kuzu',
-                    'db_path': str(db_path_expanded),
+                    'db': str(db_path_expanded),
                 }
 
             case _:
