@@ -256,7 +256,7 @@ class GraphitiService:
                         )
 
                         search_config = COMBINED_HYBRID_SEARCH_RRF
-                        self.logger.info('Using RRF reranking search configuration')
+                        logger.info('Using RRF reranking search configuration')
 
                     self.client = Graphiti(
                         graph_driver=kuzu_driver,
