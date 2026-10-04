@@ -195,6 +195,7 @@ class GraphitiService:
         self.semaphore_limit = semaphore_limit
         self.semaphore = asyncio.Semaphore(semaphore_limit)
         self.client: Graphiti | None = None
+        self.search_config = None
         self.entity_types: dict[str, type[BaseModel]] | None = None
         self.edge_types: dict[str, type[BaseModel]] | None = None
         self.edge_type_map: dict[tuple[str, str], list[str]] | None = None
@@ -249,13 +250,12 @@ class GraphitiService:
                     kuzu_driver = KuzuDriver(db=db_config['db'])
 
                     # Use RRF search config if no cross-encoder (gateway mode)
-                    search_config = None
                     if cross_encoder is None:
                         from graphiti_core.search.search_config_recipes import (
                             COMBINED_HYBRID_SEARCH_RRF,
                         )
 
-                        search_config = COMBINED_HYBRID_SEARCH_RRF
+                        self.search_config = COMBINED_HYBRID_SEARCH_RRF
                         logger.info('Using RRF reranking search configuration')
 
                     self.client = Graphiti(
@@ -263,7 +263,6 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         cross_encoder=cross_encoder,
-                        search_config=search_config,
                         max_coroutines=self.semaphore_limit,
                     )
                 elif self.config.database.provider.lower() == 'falkordb':
@@ -278,13 +277,12 @@ class GraphitiService:
                     )
 
                     # Use RRF search config if no cross-encoder (gateway mode)
-                    search_config = None
                     if cross_encoder is None:
                         from graphiti_core.search.search_config_recipes import (
                             COMBINED_HYBRID_SEARCH_RRF,
                         )
 
-                        search_config = COMBINED_HYBRID_SEARCH_RRF
+                        self.search_config = COMBINED_HYBRID_SEARCH_RRF
                         logger.info('Using RRF reranking search configuration')
 
                     self.client = Graphiti(
@@ -292,19 +290,17 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         cross_encoder=cross_encoder,
-                        search_config=search_config,
                         max_coroutines=self.semaphore_limit,
                     )
                 else:
                     # For Neo4j, use the original approach
                     # Use RRF search config if no cross-encoder (gateway mode)
-                    search_config = None
                     if cross_encoder is None:
                         from graphiti_core.search.search_config_recipes import (
                             COMBINED_HYBRID_SEARCH_RRF,
                         )
 
-                        search_config = COMBINED_HYBRID_SEARCH_RRF
+                        self.search_config = COMBINED_HYBRID_SEARCH_RRF
                         logger.info('Using RRF reranking search configuration')
 
                     self.client = Graphiti(
@@ -314,7 +310,6 @@ class GraphitiService:
                         llm_client=llm_client,
                         embedder=embedder_client,
                         cross_encoder=cross_encoder,
-                        search_config=search_config,
                         max_coroutines=self.semaphore_limit,
                     )
             except Exception as db_error:

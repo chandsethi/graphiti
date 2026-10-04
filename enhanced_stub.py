@@ -23,7 +23,9 @@ class EnhancedStubHandler(http.server.BaseHTTPRequestHandler):
             'vk': self.headers.get('x-bf-vk'),
             'auth': self.headers.get('authorization'),
             'model': request_data.get('model'),
-            'messages': len(request_data.get('messages', [])) if 'messages' in request_data else None,
+            'messages': len(request_data.get('messages', []))
+            if 'messages' in request_data
+            else None,
         }
 
         with open(LOG_FILE, 'a') as f:
@@ -52,13 +54,15 @@ class EnhancedStubHandler(http.server.BaseHTTPRequestHandler):
             if response_format.get('type') == 'json_schema':
                 # Return a minimal valid JSON that matches common Graphiti schemas
                 # This is a generic response that should work for most Graphiti prompts
-                content = json.dumps({
-                    'nodes': [],
-                    'edges': [],
-                    'episodes': [],
-                    'entities': [],
-                    'facts': [],
-                })
+                content = json.dumps(
+                    {
+                        'nodes': [],
+                        'edges': [],
+                        'episodes': [],
+                        'entities': [],
+                        'facts': [],
+                    }
+                )
             elif request_data.get('response_format', {}).get('type') == 'json_object':
                 # JSON mode
                 content = json.dumps({'result': 'success', 'data': []})

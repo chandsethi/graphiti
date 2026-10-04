@@ -5,9 +5,9 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 import time
 
-import sys
 sys.path.insert(0, '/workspace/mcp_server/src')
 
 
@@ -78,7 +78,9 @@ async def test_mcp_server():
                     'search_memory_facts',
                     arguments={'query': 'Mirrors Android', 'group_id': 'test-group', 'limit': 10},
                 )
-                print(f'✓ search_memory_facts completed: {len(search_result.content)} items returned')
+                print(
+                    f'✓ search_memory_facts completed: {len(search_result.content)} items returned'
+                )
                 print()
             except Exception as e:
                 print(f'✗ search_memory_facts failed: {e}')
@@ -117,10 +119,10 @@ def check_stub_log():
 
     for i, line in enumerate(lines, 1):
         entry = json.loads(line)
-        print(f"Request {i}:")
-        print(f"  Path: {entry['path']}")
-        print(f"  VK Header: {entry['vk']}")
-        print(f"  Model: {entry['model']}")
+        print(f'Request {i}:')
+        print(f'  Path: {entry["path"]}')
+        print(f'  VK Header: {entry["vk"]}')
+        print(f'  Model: {entry["model"]}')
 
         if 'chat/completions' in entry['path']:
             chat_requests += 1

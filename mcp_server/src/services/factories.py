@@ -346,7 +346,7 @@ class EmbedderFactory:
     """Factory for creating Embedder clients based on configuration."""
 
     @staticmethod
-    def create(config: EmbedderConfig) -> EmbedderClient:
+    def create(config: EmbedderConfig, logger=None) -> EmbedderClient:
         """Create an Embedder client based on the configured provider."""
         import logging
 
