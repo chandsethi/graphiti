@@ -2,7 +2,7 @@
 
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -34,7 +34,7 @@ async def test_llm_factory_with_custom_gateway(bifrost_env):
         ):
             mock_generic_client.return_value = MagicMock()
 
-            client = LLMClientFactory.create(config)
+            LLMClientFactory.create(config)
 
             # Should use OpenAI compatible client (generic)
             assert mock_generic_client.called
@@ -67,7 +67,7 @@ async def test_embedder_factory_with_custom_gateway(bifrost_env):
         ):
             mock_embedder.return_value = MagicMock()
 
-            embedder = EmbedderFactory.create(config)
+            EmbedderFactory.create(config)
 
             # Should create embedder
             assert mock_embedder.called
@@ -84,10 +84,6 @@ async def test_embedder_factory_with_custom_gateway(bifrost_env):
 
 def test_extra_headers_parsing():
     """Test that extra headers are correctly parsed from JSON."""
-    import json
-
-    from services.factories import LLMClientFactory
-
     test_cases = [
         ('{"x-bf-vk":"key123"}', {'x-bf-vk': 'key123'}),
         ('{"x-custom":"value","x-other":"val2"}', {'x-custom': 'value', 'x-other': 'val2'}),
@@ -101,7 +97,7 @@ def test_extra_headers_parsing():
             try:
                 result = json.loads(os.environ.get('LLM_EXTRA_HEADERS', '{}'))
                 if json_str == 'invalid-json':
-                    assert False, 'Should have raised JSONDecodeError'
+                    raise AssertionError('Should have raised JSONDecodeError')
             except json.JSONDecodeError:
                 result = {}
 

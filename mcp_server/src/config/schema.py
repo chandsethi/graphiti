@@ -303,7 +303,7 @@ class GraphitiConfig(BaseSettings):
         """Customize settings sources to include YAML."""
         config_path_str = os.environ.get('CONFIG_PATH', 'config/config.yaml')
         config_path = Path(config_path_str)
-        
+
         # Only include YAML settings if config file exists
         if config_path.exists():
             yaml_settings = YamlSettingsSource(settings_cls, config_path)

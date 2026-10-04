@@ -136,8 +136,8 @@ class LLMClientFactory:
         match provider:
             case 'openai':
                 # Check environment variable first, then config
-                import os
                 import json
+                import os
 
                 # API Key - allow dummy value for custom gateways with header auth
                 api_key = os.environ.get('OPENAI_API_KEY')
@@ -356,8 +356,8 @@ class EmbedderFactory:
         match provider:
             case 'openai':
                 # Check environment variable first, then config
-                import os
                 import json
+                import os
 
                 # API Key - allow dummy value for custom gateways
                 api_key = os.environ.get('OPENAI_API_KEY')
